@@ -9,6 +9,6 @@ pub mod trainer;
 pub use callbacks::Callback;
 pub use config::TrainerConfig;
 pub use module::{LightModule, StepOutput};
-pub use trainer::Trainer;
+pub use trainer::{DataLoader, Trainer};
 
 pub use candle::{Module, ModuleT};

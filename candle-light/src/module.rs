@@ -5,9 +5,7 @@ use std::collections::HashMap;
 
 /// Output from a training or validation step.
 pub struct StepOutput {
-    /// The loss tensor for backpropagation.
     pub loss: Tensor,
-    /// Optional metrics (e.g., accuracy, perplexity).
     pub metrics: HashMap<String, f64>,
 }
 
@@ -27,15 +25,15 @@ impl StepOutput {
 
 /// Trait for models that can be trained with [`Trainer`](crate::Trainer).
 pub trait LightModule {
-    /// Compute loss and metrics for a training batch.
-    fn training_step(&mut self, batch: &Tensor, batch_idx: usize) -> Result<StepOutput>;
+    /// The batch type (e.g., `(Tensor, Tensor)` for (inputs, labels)).
+    type Batch;
 
-    /// Compute loss and metrics for a validation batch.
-    fn validation_step(&self, batch: &Tensor, batch_idx: usize) -> Result<StepOutput> {
+    fn training_step(&mut self, batch: Self::Batch, batch_idx: usize) -> Result<StepOutput>;
+
+    fn validation_step(&self, batch: Self::Batch, batch_idx: usize) -> Result<StepOutput> {
         let _ = (batch, batch_idx);
         unimplemented!("validation_step not implemented")
     }
 
-    /// Return all trainable parameters.
     fn parameters(&self) -> Vec<Var>;
 }
