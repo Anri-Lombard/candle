@@ -1,5 +1,6 @@
 //! Training loop implementation.
 
+use crate::callbacks::EpochMetrics;
 use crate::{Callback, LightModule, StepOutput, TrainerConfig};
 use candle::Result;
 use candle_nn::Optimizer;
@@ -65,7 +66,8 @@ impl Trainer {
                 None => None,
             };
 
-            self.call_on_epoch_end(epoch)?;
+            let metrics = EpochMetrics { train_loss, val_loss };
+            self.call_on_epoch_end(epoch, &metrics)?;
 
             if self.config.log_every_n_steps > 0 {
                 match val_loss {
@@ -168,10 +170,10 @@ impl Trainer {
         Ok(())
     }
 
-    fn call_on_epoch_end(&mut self, epoch: usize) -> Result<()> {
+    fn call_on_epoch_end(&mut self, epoch: usize, metrics: &EpochMetrics) -> Result<()> {
         let mut callbacks = std::mem::take(&mut self.callbacks);
         for cb in &mut callbacks {
-            cb.on_epoch_end(self, epoch)?;
+            cb.on_epoch_end(self, epoch, metrics)?;
         }
         self.callbacks = callbacks;
         Ok(())

@@ -1,7 +1,25 @@
 //! Callback system for training hooks.
 
+mod checkpoint;
+mod early_stopping;
+
+pub use checkpoint::ModelCheckpoint;
+pub use early_stopping::EarlyStopping;
+
 use crate::{StepOutput, Trainer};
 use candle::Result;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    Min,
+    Max,
+}
+
+#[derive(Clone, Debug)]
+pub struct EpochMetrics {
+    pub train_loss: f32,
+    pub val_loss: Option<f32>,
+}
 
 pub trait Callback: Send {
     fn on_fit_start(&mut self, _trainer: &Trainer) -> Result<()> {
@@ -16,7 +34,12 @@ pub trait Callback: Send {
         Ok(())
     }
 
-    fn on_epoch_end(&mut self, _trainer: &Trainer, _epoch: usize) -> Result<()> {
+    fn on_epoch_end(
+        &mut self,
+        _trainer: &Trainer,
+        _epoch: usize,
+        _metrics: &EpochMetrics,
+    ) -> Result<()> {
         Ok(())
     }
 

@@ -6,7 +6,7 @@ extern crate accelerate_src;
 
 use anyhow::Result;
 use candle::{Device, Tensor, Var};
-use candle_light::{Callback, LightModule, StepOutput, Trainer, TrainerConfig};
+use candle_light::{Callback, EarlyStopping, EpochMetrics, LightModule, Mode, StepOutput, Trainer, TrainerConfig};
 use candle_nn::{Linear, Module, Optimizer, SGD};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -131,7 +131,12 @@ impl Callback for CountingCallback {
         Ok(())
     }
 
-    fn on_epoch_end(&mut self, _trainer: &Trainer, _epoch: usize) -> candle::Result<()> {
+    fn on_epoch_end(
+        &mut self,
+        _trainer: &Trainer,
+        _epoch: usize,
+        _metrics: &EpochMetrics,
+    ) -> candle::Result<()> {
         self.epoch_ends.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -192,7 +197,12 @@ struct EarlyStopCallback {
 }
 
 impl Callback for EarlyStopCallback {
-    fn on_epoch_end(&mut self, _trainer: &Trainer, _epoch: usize) -> candle::Result<()> {
+    fn on_epoch_end(
+        &mut self,
+        _trainer: &Trainer,
+        _epoch: usize,
+        _metrics: &EpochMetrics,
+    ) -> candle::Result<()> {
         self.current_epoch += 1;
         Ok(())
     }
@@ -232,6 +242,64 @@ fn trainer_early_stopping() -> Result<()> {
     trainer.fit(&mut model, &mut optimizer, batches, None)?;
 
     assert_eq!(epoch_count.load(Ordering::SeqCst), 3);
+
+    Ok(())
+}
+
+#[test]
+fn builtin_early_stopping() -> Result<()> {
+    let device = Device::Cpu;
+
+    // Train on one relationship (y = 3x + z - 2)
+    let w_gen = Tensor::new(&[[3f32, 1.]], &device)?;
+    let b_gen = Tensor::new(-2f32, &device)?;
+    let gen = Linear::new(w_gen, Some(b_gen));
+    let sample_xs = Tensor::new(&[[2f32, 1.], [7., 4.], [-4., 12.], [5., 8.]], &device)?;
+    let sample_ys = gen.forward(&sample_xs)?;
+
+    // Validate on a DIFFERENT relationship (y = -x + 2z + 5)
+    // This causes overfitting - as model fits train data, val loss increases
+    let w_val = Tensor::new(&[[-1f32, 2.]], &device)?;
+    let b_val = Tensor::new(5f32, &device)?;
+    let val_gen = Linear::new(w_val, Some(b_val));
+    let val_xs = Tensor::new(&[[1f32, 1.], [2., 3.], [0., 2.]], &device)?;
+    let val_ys = val_gen.forward(&val_xs)?;
+
+    let batches = vec![Batch {
+        xs: sample_xs,
+        ys: sample_ys,
+    }];
+    let val_batches = vec![Batch {
+        xs: val_xs,
+        ys: val_ys,
+    }];
+
+    let epoch_count = Arc::new(AtomicUsize::new(0));
+    let counting = CountingCallback {
+        epoch_starts: epoch_count.clone(),
+        epoch_ends: Arc::new(AtomicUsize::new(0)),
+        batch_ends: Arc::new(AtomicUsize::new(0)),
+    };
+
+    // EarlyStopping with patience=5 monitoring val_loss (min mode)
+    let early_stopping = EarlyStopping::new()
+        .monitor("val_loss")
+        .patience(5)
+        .mode(Mode::Min);
+
+    let mut model = LinearModel::new(&device)?;
+    let mut optimizer = SGD::new(model.parameters(), 0.01)?;
+
+    let config = TrainerConfig::new().max_epochs(500).log_every_n_steps(0);
+    let mut trainer = Trainer::new(config)
+        .with_callback(counting)
+        .with_callback(early_stopping);
+    trainer.fit(&mut model, &mut optimizer, batches, Some(val_batches))?;
+
+    // Should stop before 500 epochs due to early stopping on val_loss
+    let epochs_run = epoch_count.load(Ordering::SeqCst);
+    assert!(epochs_run < 500, "Early stopping should have triggered before 500 epochs, ran {}", epochs_run);
+    assert!(epochs_run > 5, "Should run more than patience epochs before stopping");
 
     Ok(())
 }
