@@ -1,0 +1,28 @@
+[package]
+name = "candle-light"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+readme = "README.md"
+
+[dependencies]
+candle = { workspace = true }
+candle-nn = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+candle-datasets = { workspace = true }
+rand = { workspace = true }
+
+[features]
+default = []
+accelerate = ["candle/accelerate", "candle-nn/accelerate"]
+cuda = ["candle/cuda", "candle-nn/cuda"]
+cudnn = ["candle/cudnn", "candle-nn/cudnn"]
+mkl = ["candle/mkl", "candle-nn/mkl"]
+metal = ["candle/metal", "candle-nn/metal"]
