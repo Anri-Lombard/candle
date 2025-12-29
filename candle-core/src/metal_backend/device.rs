@@ -156,6 +156,29 @@ impl MetalDevice {
         Ok(())
     }
 
+    /// Enable deferred sync mode. Operations queue up without automatic commits
+    /// until synchronize() is called. This reduces per-operation overhead from
+    /// ~0.3ms to ~0.02ms for small operations like embedding lookups.
+    ///
+    /// # Example
+    /// ```ignore
+    /// metal_device.set_deferred_sync(true)?;
+    /// // ... many operations queue up ...
+    /// device.synchronize()?;  // single sync at end
+    /// metal_device.set_deferred_sync(false)?;
+    /// ```
+    pub fn set_deferred_sync(&self, deferred: bool) -> Result<()> {
+        let mut commands = self.commands.write().map_err(MetalError::from)?;
+        commands.set_deferred_sync(deferred);
+        Ok(())
+    }
+
+    /// Check if deferred sync mode is enabled.
+    pub fn is_deferred_sync(&self) -> Result<bool> {
+        let commands = self.commands.read().map_err(MetalError::from)?;
+        Ok(commands.is_deferred_sync())
+    }
+
     pub fn kernels(&self) -> &Kernels {
         &self.kernels
     }
